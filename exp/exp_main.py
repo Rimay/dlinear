@@ -37,18 +37,6 @@ class Exp_Main(Exp_Basic):
             model = nn.DataParallel(model, device_ids=self.args.device_ids)
         return model
 
-    def _get_data(self, flag):
-        data_set, data_loader = data_provider(self.args, flag)
-        return data_set, data_loader
-
-    def _select_optimizer(self):
-        model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
-        return model_optim
-
-    def _select_criterion(self):
-        criterion = nn.MSELoss()
-        return criterion
-
     def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
         self.model.eval()
@@ -89,27 +77,19 @@ class Exp_Main(Exp_Basic):
         return total_loss
 
     def train(self, setting, ft=True):
-        train_data, train_loader = self._get_data(flag='train')
-        vali_data, vali_loader = self._get_data(flag='val')
-        test_data, test_loader = self._get_data(flag='test')
+        train_data, train_loader = data_provider(self.args, flag='train')
+        vali_data, vali_loader = data_provider(self.args, flag='val')
+        test_data, test_loader = data_provider(self.args, flag='test')
 
         path = os.path.join(self.args.checkpoints, setting)
         if not os.path.exists(path):
             os.makedirs(path)
 
         time_now = time.time()
-
         train_steps = len(train_loader)
         early_stopping = EarlyStopping(patience=self.args.patience, verbose=True)
-
-        model_optim = self._select_optimizer()
-        criterion = self._select_criterion()
-        
-        # scheduler = lr_scheduler.OneCycleLR(optimizer = model_optim,
-        #                             steps_per_epoch = train_steps,
-        #                             pct_start = self.args.pct_start,
-        #                             epochs = self.args.train_epochs,
-        #                             max_lr = self.args.learning_rate)
+        model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
+        criterion = nn.MSELoss()
 
         for epoch in range(self.args.train_epochs):
             iter_count = 0
@@ -154,12 +134,11 @@ class Exp_Main(Exp_Basic):
                 if 'MoLE' in self.args.model and ('Linear' in self.args.model or 'MLP' in self.args.model):
                     outputs = self.model(batch_x, batch_x_mark)
                 elif 'former' not in self.args.model:
-                        outputs = self.model(batch_x)
+                    outputs = self.model(batch_x)
+                elif self.args.output_attention:
+                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
                 else:
-                    if self.args.output_attention:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                    else:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark, batch_y)
+                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark, batch_y)
 
                 # print(outputs.shape,batch_y.shape)
                 f_dim = -1 if self.args.features == 'MS' else 0
@@ -182,10 +161,6 @@ class Exp_Main(Exp_Basic):
 
                 loss.backward()
                 model_optim.step()
-                
-                # if self.args.lradj == 'TST':
-                #     adjust_learning_rate(model_optim, scheduler, epoch + 1, self.args, verbose=False)
-                #     scheduler.step()
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
@@ -193,7 +168,7 @@ class Exp_Main(Exp_Basic):
             test_loss = self.vali(test_data, test_loader, criterion)
 
             print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
-                epoch + 1, train_steps, train_loss, vali_loss, test_loss))
+                            epoch + 1, train_steps, train_loss, vali_loss, test_loss))
             early_stopping(vali_loss, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
@@ -207,7 +182,7 @@ class Exp_Main(Exp_Basic):
         return self.model
 
     def test(self, setting, test=0, flag='test', fixed_head=None, seperate_head=False):
-        test_data, test_loader = self._get_data(flag=flag)
+        test_data, test_loader = data_provider(self.args, flag=flag)
         
         if test:
             print('loading model')
@@ -321,7 +296,7 @@ class Exp_Main(Exp_Basic):
         return
 
     def predict(self, setting, load=False):
-        pred_data, pred_loader = self._get_data(flag='pred')
+        pred_data, pred_loader = data_provider(self.args, flag='pred')
 
         if load:
             path = os.path.join(self.args.checkpoints, setting)

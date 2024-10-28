@@ -8,15 +8,15 @@ import numpy as np
 parser = argparse.ArgumentParser(description='Autoformer & Transformer family for Time Series Forecasting')
 
 # basic config
-parser.add_argument('--is_training', type=int, required=True, default=1, help='status')
+parser.add_argument('--is_training', type=int, default=1, help='status')
 parser.add_argument('--model_id', type=str, required=True, default='test', help='model id')
 parser.add_argument('--model', type=str, required=True, default='Autoformer',
                     help='model name, options: [Autoformer, Informer, Transformer]')
 
 # data loader
-parser.add_argument('--data', type=str, required=True, default='ETTm1', help='dataset type')
+parser.add_argument('--data', type=str, default='custom', help='dataset type')
 parser.add_argument('--root_path', type=str, default='./dataset/', help='root path of the data file')
-parser.add_argument('--data_path', type=str, default='ETTh1.csv', help='data file')
+parser.add_argument('--data_path', type=str, default='traffic.csv', help='data file')
 parser.add_argument('--features', type=str, default='M',
                     help='forecasting task, options:[M, S, MS]; M:multivariate predict multivariate, S:univariate predict univariate, MS:multivariate predict univariate')
 parser.add_argument('--target', type=str, default='OT', help='target feature in S or MS task')
@@ -96,12 +96,11 @@ parser.add_argument('--H_order', type=int,default=2)
 
 # optimization
 parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')
-parser.add_argument('--itr', type=int, default=2, help='experiments times')
 parser.add_argument('--train_epochs', type=int, default=40, help='train epochs')
-parser.add_argument('--batch_size', type=int, default=32, help='batch size of train input data')
+parser.add_argument('--batch_size', type=int, default=8, help='batch size of train input data')
 parser.add_argument('--patience', type=int, default=6, help='early stopping patience')
 parser.add_argument('--learning_rate', type=float, default=0.0001, help='optimizer learning rate')
-parser.add_argument('--des', type=str, default='test', help='exp description')
+parser.add_argument('--des', type=str, default='Exp', help='exp description')
 parser.add_argument('--loss', type=str, default='mse', help='loss function')
 parser.add_argument('--lradj', type=str, default='type1', help='adjust learning rate')
 parser.add_argument('--use_amp', action='store_true', help='use automatic mixed precision training', default=False)
@@ -117,8 +116,8 @@ parser.add_argument('--test_flop', action='store_true', default=False, help='See
 
 # Augmentation
 parser.add_argument('--aug_method', type=str, default='f_mask', help='f_mask: Frequency Masking, f_mix: Frequency Mixing')
-parser.add_argument('--aug_rate', type=float, default=0.5, help='mask/mix rate')
-parser.add_argument('--in_batch_augmentation', action='store_true', help='Augmentation in Batch (save memory cost)', default=False)
+parser.add_argument('--aug_rate', type=float, default=0, help='mask/mix rate')
+parser.add_argument('--in_batch_augmentation', action='store_true', help='Augmentation in Batch (save memory cost)', default=True)
 parser.add_argument('--in_dataset_augmentation', action='store_true', help='Augmentation in Dataset', default=False)
 parser.add_argument('--closer_data_aug_more', action='store_true', help='Augment times increase for data closer to test set', default=False)
 parser.add_argument('--data_size', type=float, default=1, help='size of dataset, i.e, 0.01 represents uses 1 persent samples in the dataset')
@@ -159,55 +158,51 @@ print(args)
 Exp = Exp_Main
 
 if args.is_training:
-    for ii in range(args.itr):
-        # setting record of experiments
-        setting = '{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}_{}_{}_{}_{}_{}_sd{}_hd{}'.format(
-            args.model_id,
-            args.model,
-            args.data,
-            args.features,
-            args.seq_len,
-            args.label_len,
-            args.pred_len,
-            args.d_model,
-            args.n_heads,
-            args.e_layers,
-            args.d_layers,
-            args.d_ff,
-            args.factor,
-            args.embed,
-            args.distil,
-            args.des, ii, args.batch_size, args.t_dim, args.aug_method, args.aug_rate, args.learning_rate, args.seed,
-            args.head_dropout,)
+    # setting record of experiments
+    setting = '{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}'.format(
+        args.model_id,
+        args.model,
+        args.data,
+        args.features,
+        args.seq_len,
+        args.label_len,
+        args.pred_len,
+        args.d_model,
+        args.n_heads,
+        args.e_layers,
+        args.d_layers,
+        args.d_ff,
+        args.factor,
+        args.embed,
+        args.distil)
 
-        exp = Exp(args)  # set experiments
-        if args.show_num_parameters_only:
-            print(f"Number of parameters: {sum(p.numel() for p in exp.model.parameters())}")
-            exit()
-        print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
-        if args.train_mode == 0:
-            exp.train(setting, ft=False) # train on xy
-        elif args.train_mode == 1:
-            exp.train(setting, ft=True) # train on y
-        elif args.train_mode == 2:
-            exp.train(setting, ft=False)
-            print('>>>>>>>start finetuning : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
-            exp.train(setting, ft=True) # finetune
-        
-        print('>>>>>>>testing for training losses : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-        exp.test(setting, flag='train')     
-        
-        print('>>>>>>>testing for vali losses : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-        exp.test(setting, flag='val')        
+    exp = Exp(args)  # set experiments
+    if args.show_num_parameters_only:
+        print(f"Number of parameters: {sum(p.numel() for p in exp.model.parameters())}")
+        exit()
+    print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
+    if args.train_mode == 0:
+        exp.train(setting, ft=False) # train on xy
+    elif args.train_mode == 1:
+        exp.train(setting, ft=True) # train on y
+    elif args.train_mode == 2:
+        exp.train(setting, ft=False)
+        print('>>>>>>>start finetuning : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
+        exp.train(setting, ft=True) # finetune
+    
+    print('>>>>>>>testing for training losses : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
+    exp.test(setting, flag='train')     
+    
+    print('>>>>>>>testing for vali losses : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
+    exp.test(setting, flag='val')        
 
-        print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-        exp.test(setting)
+    print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
+    exp.test(setting)
 
-        if args.do_predict:
-            print('>>>>>>>predicting : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-            exp.predict(setting, True)
-
-        torch.cuda.empty_cache()
+    if args.do_predict:
+        print('>>>>>>>predicting : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
+        exp.predict(setting, True)
+    torch.cuda.empty_cache()
 else:
     ii = 0
     setting = '{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}_hd{}_fr{}_tsr{}_rr{}_rbr{}_ew{}_bh{}'.format(args.model_id,

@@ -3,3 +3,4 @@ logs/
 dataset/
 checkpoints/
 result*
+mole/

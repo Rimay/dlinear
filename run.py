@@ -124,7 +124,6 @@ parser.add_argument('--data_size', type=float, default=1, help='size of dataset,
 parser.add_argument('--aug_data_size', type=int, default=1, help='size of augmented data, i.e, 1 means double the size of dataset')
 parser.add_argument('--seed', type=int, default=2021, help='random seed')
 parser.add_argument('--wo_original_set', action='store_true', help='without original train set')
-parser.add_argument('--test_time_train', type=bool, default=False, help='Affect data division')
 
 # output
 parser.add_argument('--save_gating_weights', type=str, help='save gating weights')

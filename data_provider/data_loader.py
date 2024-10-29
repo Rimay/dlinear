@@ -51,10 +51,6 @@ class Dataset_ETT_hour(Dataset):
         border1s = [0, 12 * 30 * 24 - self.seq_len, 12 * 30 * 24 + 4 * 30 * 24 - self.seq_len]
         border2s = [12 * 30 * 24, 12 * 30 * 24 + 4 * 30 * 24, 12 * 30 * 24 + 8 * 30 * 24]
 
-        if self.args.test_time_train:
-            border1s = [0, 18 * 30 * 24 - self.seq_len, 20 * 30 * 24]
-            border2s = [18 * 30 * 24, 20 * 30 * 24, 20 * 30 * 24]
-
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
@@ -190,10 +186,6 @@ class Dataset_ETT_minute(Dataset):
         border1s = [0, 12 * 30 * 24 * 4 - self.seq_len, 12 * 30 * 24 * 4 + 4 * 30 * 24 * 4 - self.seq_len]
         border2s = [12 * 30 * 24 * 4, 12 * 30 * 24 * 4 + 4 * 30 * 24 * 4, 12 * 30 * 24 * 4 + 8 * 30 * 24 * 4]
 
-        if self.args.test_time_train:
-            border1s = [0, 18 * 30 * 24 * 4 - self.seq_len, 20 * 30 * 24 * 4]
-            border2s = [18 * 30 * 24 * 4, 20 * 30 * 24 * 4, 20 * 30 * 24 * 4]
-
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
@@ -315,9 +307,9 @@ class Dataset_Custom(Dataset):
         self.scale = scale
         self.timeenc = timeenc
         self.freq = freq
-
         self.root_path = root_path
         self.data_path = data_path
+        
         self.__read_data__()
         self.collect_all_data()
         if self.args.in_dataset_augmentation and self.set_type==0:
@@ -340,11 +332,6 @@ class Dataset_Custom(Dataset):
         num_vali = len(df_raw) - num_train - num_test
         border1s = [0, num_train - self.seq_len, len(df_raw) - num_test - self.seq_len]
         border2s = [num_train, num_train + num_vali, len(df_raw)]
-
-        if self.args.test_time_train:
-            num_train = int(len(df_raw) * 0.9)
-            border1s = [0, num_train - self.seq_len, len(df_raw)]
-            border2s = [num_train, len(df_raw), len(df_raw)]
         
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
@@ -359,7 +346,6 @@ class Dataset_Custom(Dataset):
             train_data = df_data[border1s[0]:border2s[0]]
             self.scaler.fit(train_data.values)
             # print(self.scaler.mean_)
-            # exit()
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
@@ -383,12 +369,6 @@ class Dataset_Custom(Dataset):
     def regenerate_augmentation_data(self):
         self.collect_all_data()
         self.data_augmentation()
-
-    def reload_data(self, x_data, y_data, x_time, y_time):
-        self.x_data = x_data
-        self.y_data = y_data
-        self.x_time = x_time
-        self.y_time = y_time
         
     def collect_all_data(self):
         self.x_data = []
@@ -397,12 +377,12 @@ class Dataset_Custom(Dataset):
         self.y_time = []
         data_len = len(self.data_x) - self.seq_len - self.pred_len + 1
         mask_data_len = int((1-self.args.data_size) * data_len) if self.args.data_size < 1 else 0
-        for i in range(len(self.data_x) - self.seq_len - self.pred_len + 1):
-            if (self.set_type == 0 and i >= mask_data_len) or self.set_type != 0:
+        for i in range(data_len):
+            if self.set_type != 0 or i >= mask_data_len:
                 s_begin = i
-                s_end = s_begin + self.seq_len
+                s_end = i + self.seq_len
                 r_begin = s_end - self.label_len
-                r_end = r_begin + self.label_len + self.pred_len
+                r_end = s_end + self.pred_len
                 self.x_data.append(self.data_x[s_begin:s_end])
                 self.y_data.append(self.data_y[r_begin:r_end])
                 self.x_time.append(self.data_stamp[s_begin:s_end]) 
@@ -438,9 +418,6 @@ class Dataset_Custom(Dataset):
 
     def __len__(self):
         return len(self.x_data)
-
-    def inverse_transform(self, data):
-        return self.scaler.inverse_transform(data)
     
 
 class Dataset_Pred(Dataset):

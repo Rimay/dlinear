@@ -99,7 +99,8 @@ def visual(true, preds=None, name='./pic/test.pdf'):
 
 def test_params_flop(model,x_shape):
     """
-    If you want to thest former's flop, you need to give default value to inputs in model.forward(), the following code can only pass one argument to forward()
+    If you want to thest former's flop, you need to give default value to inputs in model.forward(), 
+    the following code can only pass one argument to forward()
     """
     model_params = 0
     for parameter in model.parameters():

@@ -1,6 +1,4 @@
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from layers.Invertible import RevIN
 from utils.headdropout import HeadDropout
 
@@ -11,7 +9,6 @@ class Model(nn.Module):
         super(Model, self).__init__()
         
         self.configs = configs
-        
         self.num_predictions = configs.t_dim
         self.seq_len = configs.seq_len
         self.pred_len = configs.pred_len
@@ -38,7 +35,7 @@ class Model(nn.Module):
         )
         self.head_dropout = HeadDropout(configs.head_dropout)
 
-    def forward(self, x, x_mark, return_gating_weights=False, return_seperate_head=False):
+    def forward(self, x, x_mark):
         # x: [B, L, D]
         x_mark_initial = x_mark[:,0]
         x = self.rev(x, 'norm') if self.rev else x
@@ -51,7 +48,6 @@ class Model(nn.Module):
         pred_raw = pred.permute(0, 2, 1).reshape(-1, self.channels, self.pred_len, self.num_predictions).permute(0, 3, 1, 2)
         pred = pred_raw * temporal_out.unsqueeze(-1)
         pred = pred.sum(dim=1).permute(0,2,1)
-        
         pred = self.rev(pred, 'denorm') if self.rev else pred
 
         return pred

@@ -1,7 +1,6 @@
 from models import MoLE_DLinear, MoLE_RLinear, MoLE_RMLP
 from data_provider.data_factory import data_provider
-from exp.exp_basic import Exp_Basic
-from utils.tools import EarlyStopping, adjust_learning_rate, visual, test_params_flop
+from utils.tools import EarlyStopping, adjust_learning_rate, test_params_flop
 from utils.metrics import metric as get_metric
 
 import numpy as np
@@ -12,36 +11,39 @@ from utils.augmentations import augmentation
 import os
 import time
 
-from torch.optim import lr_scheduler 
-
-
 import warnings
-import matplotlib.pyplot as plt
 import numpy as np
 
 warnings.filterwarnings('ignore')
 
-class Exp_Main(Exp_Basic):
+class Exp_Main(object):
     def __init__(self, args):
-        super(Exp_Main, self).__init__(args)
+        super(Exp_Main, self).__init__()
+        self.args = args
+        self.device = None
+        if self.args.use_gpu:
+            os.environ["CUDA_VISIBLE_DEVICES"] = str(
+                self.args.gpu) if not self.args.use_multi_gpu else self.args.devices
+            self.device = torch.device('cuda:{}'.format(self.args.gpu))
+            print('Use GPU: cuda:{}'.format(self.args.gpu))
+        else:
+            self.device = torch.device('cpu')
+            print('Use CPU')
 
-    def _build_model(self):
         model_dict = {
             'MoLE_DLinear': MoLE_DLinear,
             'MoLE_RLinear': MoLE_RLinear,
             'MoLE_RMLP': MoLE_RMLP,
         }
-        model = model_dict[self.args.model].Model(self.args).float()
-
+        self.model = model_dict[self.args.model].Model(self.args).float()
         if self.args.use_multi_gpu and self.args.use_gpu:
-            model = nn.DataParallel(model, device_ids=self.args.device_ids)
-        return model
+            self.model = nn.DataParallel(self.model, device_ids=self.args.device_ids)
 
-    def vali(self, vali_data, vali_loader, criterion):
+    def vali(self, vali_loader, criterion):
         total_loss = []
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
+            for _, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float()
 
@@ -51,26 +53,25 @@ class Exp_Main(Exp_Basic):
                 # decoder input
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+                
                 # encoder - decoder
                 if 'MoLE' in self.args.model and ('Linear' in self.args.model or 'MLP' in self.args.model):
                     outputs = self.model(batch_x, batch_x_mark)
                 elif 'former' not in self.args.model:
-                        outputs = self.model(batch_x)
+                    outputs = self.model(batch_x)
+                elif self.args.output_attention:
+                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
                 else:
-                    if self.args.output_attention:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                    else:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
 
                 pred = outputs.detach().cpu()
                 true = batch_y.detach().cpu()
-
                 loss = criterion(pred, true)
-
                 total_loss.append(loss)
+
         # print(total_loss)
         total_loss = np.average(total_loss)
         self.model.train()
@@ -164,8 +165,8 @@ class Exp_Main(Exp_Basic):
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
-            vali_loss = self.vali(vali_data, vali_loader, criterion)
-            test_loss = self.vali(test_data, test_loader, criterion)
+            vali_loss = self.vali(vali_loader, criterion)
+            test_loss = self.vali(test_loader, criterion)
 
             print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                             epoch + 1, train_steps, train_loss, vali_loss, test_loss))
@@ -212,7 +213,7 @@ class Exp_Main(Exp_Basic):
                 
                 if 'MoLE' in self.args.model and ('Linear' in self.args.model or 'MLP' in self.args.model):
                     if self.args.save_gating_weights:
-                        outputs, gating_weights = self.model(batch_x, batch_x_mark, return_gating_weights=True, return_seperate_head=seperate_head or fixed_head is not None)
+                        outputs, gating_weights = self.model(batch_x, batch_x_mark)
                         time_embeds.append(gating_weights.detach().cpu().numpy())
                     else:
                         outputs = self.model(batch_x, batch_x_mark, return_seperate_head=seperate_head or fixed_head is not None)

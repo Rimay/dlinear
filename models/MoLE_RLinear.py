@@ -1,6 +1,4 @@
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from layers.Invertible import RevIN
 from utils.headdropout import HeadDropout
 
@@ -33,7 +31,7 @@ class Model(nn.Module):
         self.head_dropout = HeadDropout(configs.head_dropout)
 
 
-    def forward(self, x, x_mark, return_gating_weights=False, return_seperate_head=False):
+    def forward(self, x, x_mark):
         # x: [B, L, D]
         x_mark_initial = x_mark[:,0]
 
